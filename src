@@ -1,0 +1,44 @@
+# Load required libraries
+install.packages("tidyverse")
+install.packages("lubridate")
+library(tidyverse)
+library(lubridate)
+
+# Load your inventory data
+# Assuming the data file is inventory_data.csv with columns ProductID, ProductName, StockLevel, SoldUnits, and SaleDate
+inventory_data <- read_csv("inventory_data.csv")
+
+# Clean and format the data
+inventory_data <- inventory_data %>%
+  mutate(SaleDate = as.Date(SaleDate, format = "%Y-%m-%d")) %>%
+  select(ProductID, ProductName, StockLevel, SoldUnits, SaleDate)
+
+# Calculate total sales per product
+total_sales <- inventory_data %>%
+  group_by(ProductID, ProductName) %>%
+  summarise(TotalSoldUnits = sum(SoldUnits, na.rm = TRUE))
+
+# Determine stockouts and reorder points
+stockout_data <- inventory_data %>%
+  group_by(ProductID, ProductName) %>%
+  filter(StockLevel == 0) %>%
+  summarise(StockoutCount = n())
+
+reorder_point <- inventory_data %>%
+  group_by(ProductID, ProductName) %>%
+  summarise(ReorderPoint = round(mean(SoldUnits, na.rm = TRUE) * 2))
+
+# Join stockout and reorder point data to the total sales data
+product_data <- total_sales %>%
+  left_join(stockout_data, by = c("ProductID", "ProductName")) %>%
+  left_join(reorder_point, by = c("ProductID", "ProductName"))
+
+# Update stock levels based on reorder points
+product_data <- product_data %>%
+  mutate(NewStockLevel = ifelse(StockoutCount > 0, StockLevel + ReorderPoint, StockLevel))
+
+# Save the updated stock levels to a CSV file
+write_csv(product_data, "updated_inventory.csv")
+
+# Print the updated inventory data
+print(product_data)
